@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>لعبة الطائر المغامر</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #70c5ce; touch-action: none; user-select: none; font-family: 'Arial', sans-serif; }
+        canvas { display: block; }
+        #ui { 
+            position: absolute; top: 20px; width: 100%; text-align: center; 
+            color: white; font-size: 30px; font-weight: bold; pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">النقاط: <span id="score">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let score = 0;
+    let highScore = localStorage.getItem('birdHighScore') || 0;
+    let gameActive = false; // تبدأ اللعبة بشاشة انتظار
+    let obstacles = [];
+    let frame = 0;
+
+    const player = {
+        x: 50,
+        y: canvas.height / 2,
+        size: 34,
+        dy: 0,
+        jump: -8,
+        gravity: 0.5
+    };
+
+    function createObstacle() {
+        let gap = 170; 
+        let minH = 100;
+        let h = Math.random() * (canvas.height - gap - (minH * 2)) + minH;
+        obstacles.push({ x: canvas.width, y: 0, w: 60, h: h, passed: false, type: 't' });
+        obstacles.push({ x: canvas.width, y: h + gap, w: 60, h: canvas.height - h - gap, type: 'b' });
+    }
+
+    // دالة رسم الطائر بدلاً من المربع
+    function drawBird(x, y, size) {
+        ctx.save();
+        ctx.translate(x + size/2, y + size/2);
+        // جعل الطائر يميل مع السقوط
+        let angle = Math.min(Math.PI/4, Math.max(-Math.PI/4, player.dy * 0.1));
+        ctx.rotate(angle);
+
+        // جسم الطائر
+        ctx.fillStyle = "#FFD700"; // لون ذهبي
+        ctx.beginPath();
+        ctx.arc(0, 0, size/2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // العين
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(size/4, -size/6, size/6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "black";
+        ctx.beginPath();
+        ctx.arc(size/3, -size/6, size/12, 0, Math.PI * 2);
+        ctx.fill();
+
+        // المنقار
+        ctx.fillStyle = "#FF4500";
+        ctx.beginPath();
+        ctx.moveTo(size/2, 0);
+        ctx.lineTo(size/2 + 10, 5);
+        ctx.lineTo(size/2, 10);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    function update() {
+        if (!gameActive) return;
+
+        player.dy += player.gravity;
+        player.y += player.dy;
+
+        if (player.y < 0 || player.y + player.size > canvas.height) gameOver();
+
+        if (frame % 90 === 0) createObstacle();
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let o = obstacles[i];
+            o.x -= 3.5;
+
+            // كشف الاصطدام بدقة أكبر
+            if (player.x + 5 < o.x + o.w && player.x + player.size - 5 > o.x &&
+                player.y + 5 < o.y + o.h && player.y + player.size - 5 > o.y) gameOver();
+
+            if (!o.passed && o.type === 't' && player.x > o.x + o.w) {
+                score++;
+                scoreElement.innerText = score;
+                o.passed = true;
+            }
+            if (o.x + o.w < 0) obstacles.splice(i, 1);
+        }
+        frame++;
+    }
+
+    function draw() {
+        // رسم الخلفية (السماء)
+        ctx.fillStyle = "#70c5ce";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // رسم السحب البسيطة
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.beginPath(); ctx.arc(100, 100, 30, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(canvas.width-100, 200, 40, 0, Math.PI*2); ctx.fill();
+
+        // رسم العوائق (أعمدة خضراء كلاسيكية)
+        obstacles.forEach(o => {
+            ctx.fillStyle = "#73bf2e";
+            ctx.fillRect(o.x, o.y, o.w, o.h);
+            ctx.strokeStyle = "#2e5e11";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(o.x, o.y, o.w, o.h);
+        });
+
+        // رسم الطائر
+        drawBird(player.x, player.y, player.size);
+
+        if (!gameActive) {
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "center";
+            
+            if (frame === 0) {
+                ctx.font = "bold 40px Arial";
+                ctx.fillText("طائر المغامرة", canvas.width / 2, canvas.height / 2 - 50);
+                ctx.font = "20px Arial";
+                ctx.fillText("اضغط للبدء", canvas.width / 2, canvas.height / 2 + 20);
+            } else {
+                ctx.font = "bold 35px Arial";
+                ctx.fillText("انتهت اللعبة!", canvas.width / 2, canvas.height / 2 - 50);
+                ctx.font = "25px Arial";
+                ctx.fillText("النقاط: " + score, canvas.width / 2, canvas.height / 2);
+                ctx.fillStyle = "#FFD700";
+                ctx.fillText("أعلى نتيجة: " + highScore, canvas.width / 2, canvas.height / 2 + 40);
+                ctx.fillStyle = "#00ffcc";
+                ctx.fillText("اضغط للإعادة", canvas.width / 2, canvas.height / 2 + 100);
+            }
+        }
+    }
+
+    function gameOver() { 
+        gameActive = false; 
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('birdHighScore', highScore);
+        }
+    }
+
+    function resetGame() {
+        player.y = canvas.height / 2;
+        player.dy = 0;
+        obstacles = [];
+        score = 0;
+        scoreElement.innerText = score;
+        gameActive = true;
+        frame = 0;
+    }
+
+    const input = (e) => {
+        if (e.cancelable) e.preventDefault();
+        if (gameActive) player.dy = player.jump;
+        else resetGame();
+    };
+
+    window.addEventListener('mousedown', input);
+    window.addEventListener('touchstart', input, { passive: false });
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+    loop();
+</script>
+</body>
+</html>
